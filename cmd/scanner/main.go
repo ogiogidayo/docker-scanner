@@ -1,24 +1,22 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"github.com/ogiogidayo/docker-scanner/internal/handler"
 	"github.com/ogiogidayo/docker-scanner/internal/usecase"
-	"os"
 )
 
 func main() {
-	if len(os.Args) < 2 {
-		fmt.Println("Please provide the path to the Dockerfile.")
-		return
-	}
 
-	dockerfilePath := os.Args[1]
-
+	ctx := context.Background()
 	u := usecase.NewDockerfileUsecase()
 	h := handler.NewDockerfileHandler(u)
 
-	h.Handle(dockerfilePath)
+	err := h.Handle(ctx)
+	if err != nil {
+		fmt.Printf("error in Handler: %s\n", err)
+	}
 
 	return
 }
