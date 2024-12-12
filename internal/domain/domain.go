@@ -8,7 +8,7 @@ import (
 type DockerfileInfo struct {
 	From string
 	Cmd  string
-	Run  string
+	Run  []string
 }
 
 type NpmPackage string
@@ -26,7 +26,7 @@ func isOption(s string) bool {
 }
 
 func (n *NpmPackages) ExtractNpmPackages(dockerfile DockerfileInfo) {
-	commandParts := strings.Fields(dockerfile.Run)
+	commandParts := dockerfile.Run
 
 	npmIndex := -1
 	installIndex := -1
@@ -54,7 +54,6 @@ func (n *NpmPackages) ExtractNpmPackages(dockerfile DockerfileInfo) {
 }
 
 func (n *NpmPackages) PrintNpmPackages() {
-
 	for _, pkg := range n.np {
 		fmt.Println(pkg)
 	}

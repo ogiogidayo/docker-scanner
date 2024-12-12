@@ -30,7 +30,8 @@ func (u *dockerfileUsecase) ParseDockerfile(_ context.Context, filePath string) 
 	}(file)
 
 	scanner := bufio.NewScanner(file)
-	var from, cmd, run string
+	var from, cmd string
+	var run []string
 
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
@@ -39,19 +40,13 @@ func (u *dockerfileUsecase) ParseDockerfile(_ context.Context, filePath string) 
 		} else if strings.HasPrefix(line, "CMD ") {
 			cmd = strings.TrimPrefix(line, "CMD ")
 		} else if strings.HasPrefix(line, "RUN") {
-			run = strings.TrimPrefix(line, "RUN")
+			run = append(run, strings.TrimPrefix(line, "RUN "))
 		}
 	}
 
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-
-	a := domain.DockerfileInfo{From: from, Cmd: cmd, Run: run}
-
-	npms := domain.NewNpmPackages()
-	npms.ExtractNpmPackages(a)
-	npms.PrintNpmPackages()
 
 	return &domain.DockerfileInfo{From: from, Cmd: cmd, Run: run}, nil
 }

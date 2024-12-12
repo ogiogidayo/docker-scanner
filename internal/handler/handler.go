@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"fmt"
+	"github.com/ogiogidayo/docker-scanner/internal/domain"
 	"github.com/ogiogidayo/docker-scanner/internal/usecase"
 )
 
@@ -27,8 +28,10 @@ func (h *DockerfileHandler) Handle(ctx context.Context) error {
 			fmt.Println("Error:", err)
 			return err
 		}
-
-		fmt.Printf("FROM: %s\nCMD: %s\nRUN: %s\n", info.From, info.Cmd, info.Run)
+		npms := domain.NewNpmPackages()
+		npms.ExtractNpmPackages(*info)
+		npms.PrintNpmPackages()
 	}
+
 	return nil
 }
