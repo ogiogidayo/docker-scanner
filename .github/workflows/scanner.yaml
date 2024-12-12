@@ -1,4 +1,4 @@
-name: Docker Security Scan and Comment
+name: Docker and Package Security Scan
 
 on:
   pull_request:
@@ -14,6 +14,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
+
       - name: Build Docker image
         run: |
           docker build -t my-docker-image .
@@ -21,16 +22,36 @@ jobs:
         uses: aquasecurity/setup-trivy@v0.2.0
         with:
           version: latest
-      - name: Scan Docker image with Trivy
+      - name: Scan Docker image for OS vulnerabilities
         run: |
-          trivy image --format table --output trivy-result.txt my-docker-image
-      - name: Format Trivy result
+          trivy image --format table --output os-trivy-result.txt my-docker-image
+      - name: Scan npm packages in Docker container
         run: |
-          echo "### Docker Image Vulnerability Report" > formatted-trivy-result.md
-          cat trivy-result.txt >> formatted-trivy-result.md
+          # Dockerコンテナからpackage-lock.jsonを抽出
+          docker create --name temp-container my-docker-image
+          docker cp temp-container:/app/package-lock.json package-lock.json || echo "No package-lock.json found"
+          docker rm temp-container
+
+          # package-lock.jsonが存在する場合、Trivyでスキャン実行
+          if [ -f package-lock.json ]; then
+            echo "Scanning npm dependencies..."
+            trivy fs --format table --output npm-trivy-result.txt --severity CRITICAL,HIGH,MEDIUM .
+          else
+            echo "No package-lock.json found. Skipping npm scan."
+          fi
+
+      - name: Format Trivy results for PR comment
+        run: |
+          echo "### OS Package Vulnerability Report" > formatted-trivy-result.md
+          cat os-trivy-result.txt >> formatted-trivy-result.md
+
+          if [ -f npm-trivy-result.txt ]; then
+            echo "\n### npm Package Vulnerability Report" >> formatted-trivy-result.md
+            cat npm-trivy-result.txt >> formatted-trivy-result.md
+          fi
       - name: Post comment to PR
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           path: formatted-trivy-result.md
-      - name: Clean up Trivy result file
-        run: rm -f trivy-result.txt formatted-trivy-result.md
+      - name: Clean up temporary files
+        run: rm -f os-trivy-result.txt npm-trivy-result.txt formatted-trivy-result.md package-lock.json
