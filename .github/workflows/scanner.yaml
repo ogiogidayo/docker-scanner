@@ -14,6 +14,10 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t my-docker-image .
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.0
+        with:
+          version: latest
       - name: Scan Docker image with Trivy
         run: |
           trivy image --format table --output trivy-result.txt my-docker-image
