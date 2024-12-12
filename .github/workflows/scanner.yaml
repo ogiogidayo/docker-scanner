@@ -27,7 +27,7 @@ jobs:
           trivy image --format table --output os-trivy-result.txt my-docker-image
       - name: Scan file system in Docker container (apt and others)
         run: |
-          docker create --privileged --name temp-container my-docker-image
+          docker create --name temp-container my-docker-image
           docker export temp-container > temp-container.tar
           mkdir temp-container-filesystem && tar -xf temp-container.tar -C temp-container-filesystem
           trivy fs --format table --output fs-trivy-result.txt --severity CRITICAL,HIGH,MEDIUM temp-container-filesystem || echo "No vulnerabilities found"
