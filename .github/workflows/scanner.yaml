@@ -6,7 +6,7 @@ on:
       - Dockerfile
 
 jobs:
-  scan-and-comment:
+  scan:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
