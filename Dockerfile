@@ -1,5 +1,5 @@
 # ベースイメージとして既知の脆弱性を含む古いバージョンを使用
-FROM ubuntu:16.04
+FROM ubuntu:20.04
 
 # 必要なパッケージをインストール（古いバージョンを意図的に指定）
 RUN apt-get update && apt-get install -y \
