@@ -1,0 +1,88 @@
+name: Docker and Package Security Scan
+
+on:
+  pull_request:
+    paths:
+      - Dockerfile
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v2
+
+      - name: Cache Docker layers
+        uses: actions/cache@v3
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ${{ github.ref }}
+            refs/head/master
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          tags: my-docker-image:latest
+          load: true
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
+
+      - name: Setup Trivy
+        uses: aquasecurity/setup-trivy@v0.2.0
+        with:
+          version: latest
+
+      - name: Scan Docker image for OS vulnerabilities
+        run: |
+          trivy image --format table --output os-trivy-result.txt my-docker-image
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-cache-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-cache-
+
+      - name: Scan npm packages in Docker container
+        run: |
+          docker create --name temp-container my-docker-image
+          docker cp temp-container:/app/package-lock.json package-lock.json || echo "No package-lock.json found"
+          docker rm temp-container
+
+          if [ -f package-lock.json ]; then
+            echo "Scanning npm dependencies..."
+            trivy fs --format table --output npm-trivy-result.txt --severity CRITICAL,HIGH,MEDIUM .
+          else
+            echo "No package-lock.json found. Skipping npm scan."
+          fi
+
+      - name: Format Trivy results for PR comment
+        run: |
+          echo "### OS Package Vulnerability Report" > formatted-trivy-result.md
+          cat os-trivy-result.txt >> formatted-trivy-result.md
+
+          if [ -f npm-trivy-result.txt ]; then
+            echo "\n### npm Package Vulnerability Report" >> formatted-trivy-result.md
+            cat npm-trivy-result.txt >> formatted-trivy-result.md
+          fi
+
+      - name: Post comment to PR
+        uses: marocchino/sticky-pull-request-comment@v2
+        with:
+          path: formatted-trivy-result.md
+          recreate: true
+
+      - name: Clean up temporary files and move cache
+        run: |
+          rm -f os-trivy-result.txt npm-trivy-result.txt formatted-trivy-result.md package-lock.json
+          rm -rf /tmp/.buildx-cache && mv /tmp/.buildx-cache-new /tmp/.buildx-cache
