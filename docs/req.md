@@ -1,7 +1,7 @@
 ## DockerScanner 要件定義
 
 ### Goal
-- OSSを活用してDockerイメージのセキュリティ診断とDevSecOpsの実践
+- OSSを活用してDockerイメージのセキュリティ診断とDevSecOpsの実装
 - 分析内容
   - ベースイメージのセキュリティ診断
   - パッケージの脆弱性診断
