@@ -78,8 +78,8 @@ jobs:
 
       - name: Scan for apt-get package vulnerabilities
         run: |
-          apt-get update && apt-get install -y --no-install-recommends apt-utils
-          apt-get install -y --no-install-recommends trivy
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends apt-utils
+          sudo apt-get install -y --no-install-recommends trivy
           trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.txt /var/lib/dpkg/status
 
       - name: Format Trivy results for PR comment
