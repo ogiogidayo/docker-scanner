@@ -5,8 +5,6 @@ FROM ubuntu:20.04
 RUN apt-get update && apt-get install -y \
     openssh-server=1:8.2p1-4ubuntu0.11 \
     wget=1.20.3-1ubuntu2.1 \
-    curl=7.68.0-1ubuntu2.18 \
-    nodejs=10.19.0~dfsg-3ubuntu1 \
     npm=6.14.4+ds-1ubuntu2
 
 # rootユーザーで動作（非推奨）
