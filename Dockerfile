@@ -1,14 +1,19 @@
-# Ubuntu 20.04をベースイメージを使用（脆弱性のあるイメージ）
+# Ubuntu 20.04をベースイメージとして使用
 FROM ubuntu:20.04
 
-# セキュリティ上の問題がある可能性のあるパッケージをインストール
+# 非対話モードとタイムゾーン設定
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=Asia/Tokyo
+
+# 必要なパッケージをインストール
 RUN apt-get update && apt-get install -y \
     openssh-server=1:8.2p1-4ubuntu0.11 \
     wget=1.20.3-1ubuntu2.1 \
     npm=6.14.4+ds-1ubuntu2
 
-# タイムゾーンを設定
+# タイムゾーンの設定（修正済み）
 RUN ln -fs /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
+    echo "Asia/Tokyo" > /etc/timezone && \
     dpkg-reconfigure --frontend noninteractive tzdata
 
 # rootユーザーで動作（非推奨）
