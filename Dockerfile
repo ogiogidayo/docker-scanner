@@ -4,7 +4,10 @@ FROM ubuntu:20.04
 # セキュリティ上の問題がある可能性のあるパッケージをインストール
 RUN apt-get update && apt-get install -y \
     openssh-server=1:8.2p1-4ubuntu0.11 \
-    wget=1.20.3-1ubuntu2.1
+    wget=1.20.3-1ubuntu2.1 \
+    curl=7.68.0-1ubuntu2.18 \
+    nodejs=10.19.0~dfsg-3ubuntu1 \
+    npm=6.14.4+ds-1ubuntu2
 
 # rootユーザーで動作（非推奨）
 USER root
@@ -20,6 +23,9 @@ ENV DB_PASSWORD="password123"
 
 # 脆弱なディレクトリに作業ディレクトリを設定
 WORKDIR /proc/self/fd/8
+
+# npmで脆弱なパッケージをインストール
+RUN npm install -g lodash@4.17.20
 
 # 任意のスクリプトを実行
 CMD ["/bin/bash"]
