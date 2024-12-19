@@ -76,10 +76,13 @@ jobs:
             cd -
           done
 
+      - name: Install Trivy for APT scanning
+        run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends apt-utils curl
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
+
       - name: Scan for apt-get package vulnerabilities
         run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends apt-utils
-          sudo apt-get install -y --no-install-recommends trivy
           trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.txt /var/lib/dpkg/status
 
       - name: Format Trivy results for PR comment
