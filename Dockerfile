@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
     wget=1.20.3-1ubuntu2.1 \
     npm=6.14.4+ds-1ubuntu2
 
-# タイムゾーンの設定（修正済み）
+# タイムゾーンの設定
 RUN ln -fs /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
     echo "Asia/Tokyo" > /etc/timezone && \
     dpkg-reconfigure --frontend noninteractive tzdata
@@ -28,8 +28,7 @@ EXPOSE 22 21 80
 # 環境変数に機密情報を直接記載
 ENV DB_PASSWORD="password123"
 
-# 脆弱なディレクトリに作業ディレクトリを設定
-WORKDIR /proc/self/fd/8
+WORKDIR /app
 
 # npmで脆弱なパッケージをインストール
 RUN npm install -g lodash@4.17.20
