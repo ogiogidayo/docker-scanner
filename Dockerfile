@@ -7,6 +7,10 @@ RUN apt-get update && apt-get install -y \
     wget=1.20.3-1ubuntu2.1 \
     npm=6.14.4+ds-1ubuntu2
 
+# タイムゾーンを設定
+RUN ln -fs /usr/share/zoneinfo/Asia/Tokyo /etc/localtime && \
+    dpkg-reconfigure --frontend noninteractive tzdata
+
 # rootユーザーで動作（非推奨）
 USER root
 
