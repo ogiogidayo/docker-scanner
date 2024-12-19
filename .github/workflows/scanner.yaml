@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - Dockerfile
+      - '**/package.json'
 
 jobs:
   scan:
@@ -45,7 +46,18 @@ jobs:
         run: |
           trivy image --format table --output os-trivy-result.txt my-docker-image
 
+      - name: Find package.json files
+        id: find-package-json
+        run: |
+          files=$(find . -type f -name package.json)
+          if [ -z "$files" ]; then
+            echo "No package.json found."
+            exit 0
+          fi
+          echo "found-package-json=$files" >> $GITHUB_ENV
+
       - name: Cache npm dependencies
+        if: env.found-package-json != ''
         uses: actions/cache@v3
         with:
           path: ~/.npm
@@ -53,19 +65,39 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-cache-
 
-      - name: Install npm dependencies
-        run: npm install
-
-      - name: Scan npm packages for vulnerabilities
+      - name: Install npm dependencies and scan packages
+        if: env.found-package-json != ''
         run: |
-          trivy fs --security-checks vuln --scanners vuln --format table --output npm-trivy-result.txt .
+          for package_json in ${{ env.found-package-json }}; do
+            dir=$(dirname $package_json)
+            cd $dir
+            npm install
+            trivy fs --security-checks vuln --scanners vuln --format table --output npm-trivy-result.txt .
+            cd -
+          done
+
+      - name: Scan for apt-get package vulnerabilities
+        run: |
+          apt-get update && apt-get install -y --no-install-recommends apt-utils
+          apt-get install -y --no-install-recommends trivy
+          trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.txt /var/lib/dpkg/status
 
       - name: Format Trivy results for PR comment
         run: |
           echo "### OS Package Vulnerability Report" > formatted-trivy-result.md
           cat os-trivy-result.txt >> formatted-trivy-result.md
-          echo "\n### NPM Package Vulnerability Report" >> formatted-trivy-result.md
-          cat npm-trivy-result.txt >> formatted-trivy-result.md
+          if [ -n "${{ env.found-package-json }}" ]; then
+            echo "\n### NPM Package Vulnerability Report" >> formatted-trivy-result.md
+            for package_json in ${{ env.found-package-json }}; do
+              dir=$(basename $(dirname $package_json))
+              echo "#### $dir" >> formatted-trivy-result.md
+              cat $dir/npm-trivy-result.txt >> formatted-trivy-result.md
+            done
+          fi
+          if [ -f apt-trivy-result.txt ]; then
+            echo "\n### APT Package Vulnerability Report" >> formatted-trivy-result.md
+            cat apt-trivy-result.txt >> formatted-trivy-result.md
+          fi
 
       - name: Post comment to PR
         uses: marocchino/sticky-pull-request-comment@v2
@@ -75,5 +107,5 @@ jobs:
 
       - name: Clean up temporary files and move cache
         run: |
-          rm -f os-trivy-result.txt npm-trivy-result.txt formatted-trivy-result.md
+          rm -f *.txt formatted-trivy-result.md
           rm -rf /tmp/.buildx-cache && mv /tmp/.buildx-cache-new /tmp/.buildx-cache
