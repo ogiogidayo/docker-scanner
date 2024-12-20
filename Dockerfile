@@ -1,7 +1,6 @@
 # Ubuntu 20.04をベースイメージとして使用
 FROM ubuntu:20.04
 
-# 非対話モードとタイムゾーン設定
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=Asia/Tokyo
 
