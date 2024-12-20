@@ -4,13 +4,14 @@ on:
   pull_request:
     paths:
       - Dockerfile
+      - '**/package.json'
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
       contents: read
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -45,7 +46,18 @@ jobs:
         run: |
           trivy image --format table --output os-trivy-result.txt my-docker-image
 
+      - name: Find package.json files
+        id: find-package-json
+        run: |
+          files=$(find . -type f -name package.json)
+          if [ -z "$files" ]; then
+            echo "No package.json found."
+            exit 0
+          fi
+          echo "found-package-json=$files" >> $GITHUB_ENV
+
       - name: Cache npm dependencies
+        if: env.found-package-json != ''
         uses: actions/cache@v3
         with:
           path: ~/.npm
@@ -53,36 +65,36 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-cache-
 
-      - name: Scan npm packages in Docker container
+      - name: Install npm dependencies and scan packages
+        if: env.found-package-json != ''
         run: |
-          docker create --name temp-container my-docker-image
-          docker cp temp-container:/app/package-lock.json package-lock.json || echo "No package-lock.json found"
-          docker rm temp-container
+          for package_json in ${{ env.found-package-json }}; do
+            dir=$(dirname $package_json)
+            cd $dir
+            npm install
+            trivy fs --security-checks vuln --scanners vuln --format table --output npm-trivy-result-$dir.txt .
+            cd -
+          done
 
-          if [ -f package-lock.json ]; then
-            echo "Scanning npm dependencies..."
-            trivy fs --format table --output npm-trivy-result.txt --severity CRITICAL,HIGH,MEDIUM .
-          else
-            echo "No package-lock.json found. Skipping npm scan."
-          fi
-
-      - name: Format Trivy results for PR comment
+      - name: Install Trivy for APT scanning
         run: |
-          echo "### OS Package Vulnerability Report" > formatted-trivy-result.md
-          cat os-trivy-result.txt >> formatted-trivy-result.md
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends apt-utils curl
+          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
 
-          if [ -f npm-trivy-result.txt ]; then
-            echo "\n### npm Package Vulnerability Report" >> formatted-trivy-result.md
-            cat npm-trivy-result.txt >> formatted-trivy-result.md
-          fi
+      - name: Scan for apt-get package vulnerabilities
+        run: |
+          trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.txt /var/lib/dpkg/status
 
-      - name: Post comment to PR
-        uses: marocchino/sticky-pull-request-comment@v2
+      - name: Upload Trivy results as artifacts
+        uses: actions/upload-artifact@v3
         with:
-          path: formatted-trivy-result.md
-          recreate: true
+          name: trivy-results
+          path: |
+            os-trivy-result.txt
+            apt-trivy-result.txt
+            npm-trivy-result-*.txt
 
       - name: Clean up temporary files and move cache
         run: |
-          rm -f os-trivy-result.txt npm-trivy-result.txt formatted-trivy-result.md package-lock.json
+          rm -f *.txt 
           rm -rf /tmp/.buildx-cache && mv /tmp/.buildx-cache-new /tmp/.buildx-cache
