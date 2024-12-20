@@ -44,7 +44,7 @@ jobs:
 
       - name: Scan Docker image for OS vulnerabilities
         run: |
-          trivy image --format table --output os-trivy-result.csv my-docker-image
+          trivy image --format table --output os-trivy-result.txt my-docker-image
 
       - name: Find package.json files
         id: find-package-json
@@ -72,7 +72,7 @@ jobs:
             dir=$(dirname $package_json)
             cd $dir
             npm install
-            trivy fs --security-checks vuln --scanners vuln --format table --output npm-trivy-result-$dir.csv .
+            trivy fs --security-checks vuln --scanners vuln --format table --output npm-trivy-result-$dir.txt .
             cd -
           done
 
@@ -83,18 +83,18 @@ jobs:
 
       - name: Scan for apt-get package vulnerabilities
         run: |
-          trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.csv /var/lib/dpkg/status
+          trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.txt /var/lib/dpkg/status
 
       - name: Upload Trivy results as artifacts
         uses: actions/upload-artifact@v3
         with:
           name: trivy-results
           path: |
-            os-trivy-result.csv
-            apt-trivy-result.csv
-            npm-trivy-result-*.csv
+            os-trivy-result.txt
+            apt-trivy-result.txt
+            npm-trivy-result-*.txt
 
       - name: Clean up temporary files and move cache
         run: |
-          rm -f *.csv 
+          rm -f *.txt 
           rm -rf /tmp/.buildx-cache && mv /tmp/.buildx-cache-new /tmp/.buildx-cache
