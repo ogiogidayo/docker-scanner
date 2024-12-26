@@ -81,22 +81,20 @@ jobs:
         run: |
           trivy fs --security-checks vuln --scanners vuln --format json --output apt-trivy-result.json /var/lib/dpkg/status
 
-      - name: Generate Summary for PR Comment
-        id: generate-comment
+      - name: Generate Summary Table for PR Comment
         run: |
           echo "### Trivy Scan Results" > trivy-comment.md
 
-          # 全体の脆弱性カウント
+          # サマリー表のヘッダーを追加
           echo "#### Vulnerability Summary" >> trivy-comment.md
-          jq -r '
-            .Results[] | 
-            select(.Vulnerabilities != null) | 
-            .Vulnerabilities[] | 
-            .Severity' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json |
-            sort | uniq -c | awk '{print "* " $2 ": " $1}' >> trivy-comment.md
+          echo "| Severity  | Count | Color |" >> trivy-comment.md
+          echo "|-----------|-------|-------|" >> trivy-comment.md
 
-          # CRITICALとHIGHの詳細を出力
-          echo "#### CRITICAL and HIGH Vulnerabilities" >> trivy-comment.md
+          # 各重大度レベルと対応する色付きアイコンを定義
+          echo "| CRITICAL  | $(jq -r '[.Results[].Vulnerabilities[] | select(.Severity=="CRITICAL")] | length' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json) | 🟥    |" >> trivy-comment.md
+          echo "| HIGH      | $(jq -r '[.Results[].Vulnerabilities[] | select(.Severity=="HIGH")] | length' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)     | 🟧    |" >> trivy-comment.md
+          echo "| MEDIUM    | $(jq -r '[.Results[].Vulnerabilities[] | select(.Severity=="MEDIUM")] | length' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)   | 🟨    |" >> trivy-comment.md
+          echo "| LOW       | $(jq -r '[.Results[].Vulnerabilities[] | select(.Severity=="LOW")] | length' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)     | 🟩    |" >> trivy-comment.md
           jq -r '
             .Results[] | 
             select(.Vulnerabilities != null) | 
