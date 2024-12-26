@@ -88,20 +88,20 @@ jobs:
           if [ ! -f "apt-trivy-result.json" ]; then echo '{}' > apt-trivy-result.json; fi
           if [ -z "$(ls npm-trivy-result-*.json 2>/dev/null)" ]; then echo '{}' > dummy-npm-results.json; fi
 
-          # 各Severityのカウントを計算（null値を0として扱う）
-          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
-          HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
-          MEDIUM_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
-          LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          # 各Severityのカウントを計算
+          CRITICAL_COUNT=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          HIGH_COUNT=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          MEDIUM_COUNT=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          LOW_COUNT=$(jq -r '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
 
           # Markdown形式の表を生成
           echo "#### Vulnerability Summary" > trivy-comment.md
           echo "| Severity  | Count | Color |" >> trivy-comment.md
           echo "|-----------|-------|-------|" >> trivy-comment.md
-          echo "| CRITICAL  | $CRITICAL_COUNT     | 🟥    |" >> trivy-comment.md
-          echo "| HIGH      | $HIGH_COUNT     | 🟧    |" >> trivy-comment.md
-          echo "| MEDIUM    | $MEDIUM_COUNT     | 🟨    |" >> trivy-comment.md
-          echo "| LOW       | $LOW_COUNT     | 🟩    |" >> trivy-comment.md
+          echo "| CRITICAL  | ${CRITICAL_COUNT}     | 🟥    |" >> trivy-comment.md
+          echo "| HIGH      | ${HIGH_COUNT}     | 🟧    |" >> trivy-comment.md
+          echo "| MEDIUM    | ${MEDIUM_COUNT}     | 🟨    |" >> trivy-comment.md
+          echo "| LOW       | ${LOW_COUNT}     | 🟩    |" >> trivy-comment.md
 
           # CRITICALとHIGHの詳細情報を追加
           jq -r '
