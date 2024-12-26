@@ -86,24 +86,23 @@ jobs:
         run: |
           echo "### Trivy Scan Results" > trivy-comment.md
 
-          echo "#### OS Vulnerabilities" >> trivy-comment.md
-          jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' os-trivy-result.json | \
-            jq -r '. as $data | "* \($data.Target): \($data.Vulnerabilities | length) vulnerabilities found."' >> trivy-comment.md || \
-            echo "No vulnerabilities found." >> trivy-comment.md
+          # 全体の脆弱性カウント
+          echo "#### Vulnerability Summary" >> trivy-comment.md
+          jq -r '
+            .Results[] | 
+            select(.Vulnerabilities != null) | 
+            .Vulnerabilities[] | 
+            .Severity' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json |
+            sort | uniq -c | awk '{print "* " $2 ": " $1}' >> trivy-comment.md
 
-          echo "#### APT Package Vulnerabilities" >> trivy-comment.md
-          jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' apt-trivy-result.json | \
-            jq -r '. as $data | "* \($data.Target): \($data.Vulnerabilities | length) vulnerabilities found."' >> trivy-comment.md || \
-            echo "No vulnerabilities found." >> trivy-comment.md
-
-          if [ "${{ env.found-package-json }}" != "" ]; then
-            echo "#### npm Package Vulnerabilities" >> trivy-comment.md
-            for file in npm-trivy-result-*.json; do 
-              jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' $file | \
-                jq -r '. as $data | "* \($data.Target): \($data.Vulnerabilities | length) vulnerabilities found."' >> trivy-comment.md || \
-                echo "No vulnerabilities found in $file." >> trivy-comment.md 
-            done 
-          fi
+          # CRITICALとHIGHの詳細を出力
+          echo "#### CRITICAL and HIGH Vulnerabilities" >> trivy-comment.md
+          jq -r '
+            .Results[] | 
+            select(.Vulnerabilities != null) | 
+            .Vulnerabilities[] | 
+            select(.Severity == "CRITICAL" or .Severity == "HIGH") |
+            "* Target: \(.Target)\n  - VulnerabilityID: \(.VulnerabilityID)\n  - Severity: \(.Severity)\n  - Package: \(.PkgName) (\(.InstalledVersion))\n  - Fixed Version: \(.FixedVersion)\n  - Title: \(.Title)\n  - Description: \(.Description)"' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json >> trivy-comment.md || echo "No CRITICAL or HIGH vulnerabilities found." >> trivy-comment.md
 
       - name: Post PR Comment with Trivy Results
         uses: actions/github-script@v6
