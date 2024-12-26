@@ -81,21 +81,27 @@ jobs:
         run: |
           trivy fs --security-checks vuln --scanners vuln --format json --output apt-trivy-result.json /var/lib/dpkg/status
 
-      - name: Generate PR Comment Content
+      - name: Generate Summary for PR Comment
         id: generate-comment
         run: |
           echo "### Trivy Scan Results" > trivy-comment.md
 
           echo "#### OS Vulnerabilities" >> trivy-comment.md
-          jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' os-trivy-result.json >> trivy-comment.md || echo "No vulnerabilities found." >> trivy-comment.md
+          jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' os-trivy-result.json | \
+            jq -r '. as $data | "* \($data.Target): \($data.Vulnerabilities | length) vulnerabilities found."' >> trivy-comment.md || \
+            echo "No vulnerabilities found." >> trivy-comment.md
 
           echo "#### APT Package Vulnerabilities" >> trivy-comment.md
-          jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' apt-trivy-result.json >> trivy-comment.md || echo "No vulnerabilities found." >> trivy-comment.md
+          jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' apt-trivy-result.json | \
+            jq -r '. as $data | "* \($data.Target): \($data.Vulnerabilities | length) vulnerabilities found."' >> trivy-comment.md || \
+            echo "No vulnerabilities found." >> trivy-comment.md
 
           if [ "${{ env.found-package-json }}" != "" ]; then
             echo "#### npm Package Vulnerabilities" >> trivy-comment.md
             for file in npm-trivy-result-*.json; do 
-              jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' $file >> trivy-comment.md || echo "No vulnerabilities found in $file." >> trivy-comment.md 
+              jq '.Results[] | select(.Vulnerabilities != null) | {Target, Vulnerabilities}' $file | \
+                jq -r '. as $data | "* \($data.Target): \($data.Vulnerabilities | length) vulnerabilities found."' >> trivy-comment.md || \
+                echo "No vulnerabilities found in $file." >> trivy-comment.md 
             done 
           fi
 
