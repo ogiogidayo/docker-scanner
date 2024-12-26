@@ -98,10 +98,10 @@ jobs:
           echo "#### Vulnerability Summary" > trivy-comment.md
           echo "| Severity  | Count | Color |" >> trivy-comment.md
           echo "|-----------|-------|-------|" >> trivy-comment.md
-          echo "| CRITICAL  | ${CRITICAL_COUNT}     | 🟥    |" >> trivy-comment.md
-          echo "| HIGH      | ${HIGH_COUNT}     | 🟧    |" >> trivy-comment.md
-          echo "| MEDIUM    | ${MEDIUM_COUNT}     | 🟨    |" >> trivy-comment.md
-          echo "| LOW       | ${LOW_COUNT}     | 🟩    |" >> trivy-comment.md
+          echo "| CRITICAL  | $CRITICAL_COUNT     | 🟥    |" >> trivy-comment.md
+          echo "| HIGH      | $HIGH_COUNT     | 🟧    |" >> trivy-comment.md
+          echo "| MEDIUM    | $MEDIUM_COUNT     | 🟨    |" >> trivy-comment.md
+          echo "| LOW       | $LOW_COUNT     | 🟩    |" >> trivy-comment.md
 
           # CRITICALとHIGHの詳細情報を追加
           jq -r '
