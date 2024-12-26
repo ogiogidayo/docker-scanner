@@ -83,12 +83,17 @@ jobs:
 
       - name: Generate Summary Table for PR Comment
         run: |
-          # 各Severityのカウントを計算
-          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length // 0' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)
-          HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length // 0' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)
-          MEDIUM_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length // 0' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)
-          LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length // 0' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json)
-          
+          # ファイルが存在しない場合は空のJSONファイルを作成
+          if [ ! -f "os-trivy-result.json" ]; then echo '{}' > os-trivy-result.json; fi
+          if [ ! -f "apt-trivy-result.json" ]; then echo '{}' > apt-trivy-result.json; fi
+          if [ -z "$(ls npm-trivy-result-*.json 2>/dev/null)" ]; then echo '{}' > dummy-npm-results.json; fi
+
+          # 各Severityのカウントを計算（null値を0として扱う）
+          CRITICAL_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          HIGH_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="HIGH")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          MEDIUM_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          LOW_COUNT=$(jq '[.Results[]?.Vulnerabilities[]? | select(.Severity=="LOW")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+
           # Markdown形式の表を生成
           echo "#### Vulnerability Summary" > trivy-comment.md
           echo "| Severity  | Count | Color |" >> trivy-comment.md
@@ -97,14 +102,14 @@ jobs:
           echo "| HIGH      | $HIGH_COUNT     | 🟧    |" >> trivy-comment.md
           echo "| MEDIUM    | $MEDIUM_COUNT     | 🟨    |" >> trivy-comment.md
           echo "| LOW       | $LOW_COUNT     | 🟩    |" >> trivy-comment.md
-          
+
           # CRITICALとHIGHの詳細情報を追加
           jq -r '
             .Results[]? |
             select(.Vulnerabilities != null) |
             .Vulnerabilities[]? |
             select(.Severity == "CRITICAL" or .Severity == "HIGH") |
-            "* Target: \(.Target)\n  - VulnerabilityID: \(.VulnerabilityID)\n  - Severity: \(.Severity)\n  - Package: \(.PkgName) (\(.InstalledVersion))\n  - Fixed Version: \(.FixedVersion)\n  - Title: \(.Title)\n  - Description: \(.Description)"' os-trivy-result.json apt-trivy-result.json npm-trivy-result-*.json >> trivy-comment.md || echo "No CRITICAL or HIGH vulnerabilities found." >> trivy-comment.md
+            "* Target: \(.Target)\n  - VulnerabilityID: \(.VulnerabilityID)\n  - Severity: \(.Severity)\n  - Package: \(.PkgName) (\(.InstalledVersion))\n  - Fixed Version: \(.FixedVersion)\n  - Title: \(.Title)\n  - Description: \(.Description)"' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json >> trivy-comment.md || echo "No CRITICAL or HIGH vulnerabilities found." >> trivy-comment.md
 
       - name: Post PR Comment with Trivy Results
         uses: actions/github-script@v6
