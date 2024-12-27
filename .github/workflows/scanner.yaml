@@ -11,6 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      pull-requests: write # PRコメントのために必要
 
     steps:
       - name: Checkout code
@@ -44,7 +45,7 @@ jobs:
 
       - name: Scan Docker image for OS vulnerabilities
         run: |
-          trivy image --format table --output os-trivy-result.txt my-docker-image
+          trivy image --format json --output os-trivy-result.json my-docker-image
 
       - name: Find package.json files
         id: find-package-json
@@ -71,30 +72,61 @@ jobs:
           for package_json in ${{ env.found-package-json }}; do
             dir=$(dirname $package_json)
             cd $dir
-            npm install
-            trivy fs --security-checks vuln --scanners vuln --format table --output npm-trivy-result-$dir.txt .
+            npm install --silent # ログを抑制するため --silent を追加
+            trivy fs --security-checks vuln --scanners vuln --format json --output npm-trivy-result-$dir.json .
             cd -
           done
 
-      - name: Install Trivy for APT scanning
-        run: |
-          sudo apt-get update && sudo apt-get install -y --no-install-recommends apt-utils curl
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sudo sh -s -- -b /usr/local/bin
-
       - name: Scan for apt-get package vulnerabilities
         run: |
-          trivy fs --security-checks vuln --scanners vuln --format table --output apt-trivy-result.txt /var/lib/dpkg/status
+          trivy fs --security-checks vuln --scanners vuln --format json --output apt-trivy-result.json /var/lib/dpkg/status
 
-      - name: Upload Trivy results as artifacts
-        uses: actions/upload-artifact@v3
+      - name: Generate Summary Table for PR Comment
+        run: |
+          # ファイルが存在しない場合は空のJSONファイルを作成
+          if [ ! -f "os-trivy-result.json" ]; then echo '{}' > os-trivy-result.json; fi
+          if [ ! -f "apt-trivy-result.json" ]; then echo '{}' > apt-trivy-result.json; fi
+          if [ -z "$(ls npm-trivy-result-*.json 2>/dev/null)" ]; then echo '{}' > dummy-npm-results.json; fi
+          
+          # 各Severityのカウントを計算（null値を0として扱う）
+          CRITICAL_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          HIGH_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          MEDIUM_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          LOW_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="LOW")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          
+          # Markdown形式の表を生成
+          {
+            echo "#### Vulnerability Summary"
+            echo "| Severity  | Count | Color |"
+            echo "|-----------|-------|-------|"
+            echo "| CRITICAL  | ${CRITICAL_COUNT}     | 🟥    |"
+            echo "| HIGH      | ${HIGH_COUNT}     | 🟧    |"
+            echo "| MEDIUM    | ${MEDIUM_COUNT}     | 🟨    |"
+            echo "| LOW       | ${LOW_COUNT}     | 🟩    |"
+          } > trivy-comment.md
+          
+          # CRITICALとHIGHの詳細情報を追加
+          jq -r '
+            .Results[]? |
+            select(.Vulnerabilities != null) |
+            .Vulnerabilities[]? |
+            select(.Severity == "CRITICAL" or .Severity == "HIGH") |
+            "* Target: \(.Target)\n  - VulnerabilityID: \(.VulnerabilityID)\n  - Severity: \(.Severity)\n  - Package: \(.PkgName) (\(.InstalledVersion))\n  - Fixed Version: \(.FixedVersion)\n  - Title: \(.Title)\n  - Description: \(.Description)"' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json >> trivy-comment.md || echo "No CRITICAL or HIGH vulnerabilities found." >> trivy-comment.md
+
+      - name: Post PR Comment with Trivy Results
+        uses: actions/github-script@v6
         with:
-          name: trivy-results
-          path: |
-            os-trivy-result.txt
-            apt-trivy-result.txt
-            npm-trivy-result-*.txt
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('trivy-comment.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment,
+            });
 
       - name: Clean up temporary files and move cache
         run: |
-          rm -f *.txt 
+          rm -f *.json *.md 
           rm -rf /tmp/.buildx-cache && mv /tmp/.buildx-cache-new /tmp/.buildx-cache
