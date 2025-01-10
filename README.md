@@ -5,14 +5,14 @@ sequenceDiagram
     participant user as User
     participant github as GitHub
     participant actions as Actions(CI/CD)
-    participant API
+    participant trivy as Trivy
         
     user ->>+github: Push Dockerfile
     github ->>actions: Trigger
     par Dockerfile解析
+    actions ->>trivy: パッケージファイルの診断
+    trivy ->>actions: response
     actions ->>actions: Dockerfile解析
-    actions ->>API: GET image情報
-    API->> actions: res
     end
    actions ->>github: report if PR
 ```

@@ -4,13 +4,15 @@ on:
   pull_request:
     paths:
       - Dockerfile
+      - '**/package.json'
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     permissions:
-      pull-requests: write
       contents: read
+      pull-requests: write # PRコメントのために必要
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
@@ -43,9 +45,20 @@ jobs:
 
       - name: Scan Docker image for OS vulnerabilities
         run: |
-          trivy image --format table --output os-trivy-result.txt my-docker-image
+          trivy image --format json --output os-trivy-result.json my-docker-image
+
+      - name: Find package.json files
+        id: find-package-json
+        run: |
+          files=$(find . -type f -name package.json)
+          if [ -z "$files" ]; then
+            echo "No package.json found."
+            exit 0
+          fi
+          echo "found-package-json=$files" >> $GITHUB_ENV
 
       - name: Cache npm dependencies
+        if: env.found-package-json != ''
         uses: actions/cache@v3
         with:
           path: ~/.npm
@@ -53,36 +66,67 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-npm-cache-
 
-      - name: Scan npm packages in Docker container
+      - name: Install npm dependencies and scan packages
+        if: env.found-package-json != ''
         run: |
-          docker create --name temp-container my-docker-image
-          docker cp temp-container:/app/package-lock.json package-lock.json || echo "No package-lock.json found"
-          docker rm temp-container
+          for package_json in ${{ env.found-package-json }}; do
+            dir=$(dirname $package_json)
+            cd $dir
+            npm install --silent # ログを抑制するため --silent を追加
+            trivy fs --security-checks vuln --scanners vuln --format json --output npm-trivy-result-$dir.json .
+            cd -
+          done
 
-          if [ -f package-lock.json ]; then
-            echo "Scanning npm dependencies..."
-            trivy fs --format table --output npm-trivy-result.txt --severity CRITICAL,HIGH,MEDIUM .
-          else
-            echo "No package-lock.json found. Skipping npm scan."
-          fi
-
-      - name: Format Trivy results for PR comment
+      - name: Scan for apt-get package vulnerabilities
         run: |
-          echo "### OS Package Vulnerability Report" > formatted-trivy-result.md
-          cat os-trivy-result.txt >> formatted-trivy-result.md
+          trivy fs --security-checks vuln --scanners vuln --format json --output apt-trivy-result.json /var/lib/dpkg/status
 
-          if [ -f npm-trivy-result.txt ]; then
-            echo "\n### npm Package Vulnerability Report" >> formatted-trivy-result.md
-            cat npm-trivy-result.txt >> formatted-trivy-result.md
-          fi
+      - name: Generate Summary Table for PR Comment
+        run: |
+          # ファイルが存在しない場合は空のJSONファイルを作成
+          if [ ! -f "os-trivy-result.json" ]; then echo '{}' > os-trivy-result.json; fi
+          if [ ! -f "apt-trivy-result.json" ]; then echo '{}' > apt-trivy-result.json; fi
+          if [ -z "$(ls npm-trivy-result-*.json 2>/dev/null)" ]; then echo '{}' > dummy-npm-results.json; fi
+          
+          # 各Severityのカウントを計算（null値を0として扱う）
+          CRITICAL_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="CRITICAL")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          HIGH_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="HIGH")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          MEDIUM_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="MEDIUM")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          LOW_COUNT=$(jq -s '[.[] | .Results[]? | .Vulnerabilities[]? | select(.Severity=="LOW")] | length // 0' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json)
+          
+          # Markdown形式の表を生成
+          {
+            echo "#### Vulnerability Summary"
+            echo "| Severity  | Count | Color |"
+            echo "|-----------|-------|-------|"
+            echo "| CRITICAL  | ${CRITICAL_COUNT}     | 🟥    |"
+            echo "| HIGH      | ${HIGH_COUNT}     | 🟧    |"
+            echo "| MEDIUM    | ${MEDIUM_COUNT}     | 🟨    |"
+            echo "| LOW       | ${LOW_COUNT}     | 🟩    |"
+          } > trivy-comment.md
+          
+          # CRITICALとHIGHの詳細情報を追加
+          jq -r '
+            .Results[]? |
+            select(.Vulnerabilities != null) |
+            .Vulnerabilities[]? |
+            select(.Severity == "CRITICAL" or .Severity == "HIGH") |
+            "* Target: \(.Target)\n  - VulnerabilityID: \(.VulnerabilityID)\n  - Severity: \(.Severity)\n  - Package: \(.PkgName) (\(.InstalledVersion))\n  - Fixed Version: \(.FixedVersion)\n  - Title: \(.Title)\n  - Description: \(.Description)"' os-trivy-result.json apt-trivy-result.json dummy-npm-results.json >> trivy-comment.md || echo "No CRITICAL or HIGH vulnerabilities found." >> trivy-comment.md
 
-      - name: Post comment to PR
-        uses: marocchino/sticky-pull-request-comment@v2
+      - name: Post PR Comment with Trivy Results
+        uses: actions/github-script@v6
         with:
-          path: formatted-trivy-result.md
-          recreate: true
+          script: |
+            const fs = require('fs');
+            const comment = fs.readFileSync('trivy-comment.md', 'utf8');
+            github.rest.issues.createComment({
+              issue_number: context.payload.pull_request.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment,
+            });
 
       - name: Clean up temporary files and move cache
         run: |
-          rm -f os-trivy-result.txt npm-trivy-result.txt formatted-trivy-result.md package-lock.json
+          rm -f *.json *.md 
           rm -rf /tmp/.buildx-cache && mv /tmp/.buildx-cache-new /tmp/.buildx-cache
